@@ -1,0 +1,24 @@
+[package]
+name = "scrippolib"
+version = "0.1.1"
+edition = "2024"
+description = "Package manager for scrippo packages and scripts"
+
+[lib]
+name = "scrippolib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scrippolib"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+# The scrippo compiler: @info parsing, package compilation and install hooks.
+scriptopotamus = { path = "../scriptopotamus" }
+
+[dev-dependencies]

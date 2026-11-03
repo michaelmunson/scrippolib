@@ -1,0 +1,47 @@
+#! /usr/bin/env scrippo
+@info
+     --name scrippolib-internal
+     --version 1.0.0
+     --description "description"
+     --autoload enable
+
+@import scrippo/std
+
+.version()
+     .get()
+          cargo pkgid | sed -E 's/.*#([^:]+).*/\1/'
+     .bump(bump<str {patch minor major}> [message<str="Bump Version">])
+          prt "Current Version:" -s yellow "$(version get)"
+          prt "Bump:" -s green "$bump"
+          input --confirm "Bump Version?" -v answer
+          if ! $answer
+               throw 1 "Bump Version Aborted"
+          cargo set-version --bump $bump
+          new_version<str>="$(version get)"
+          [[ -n $message ]] || message="$new_version / $bump"
+          git status
+          input "Commit: $message" --confirm  -v answer
+          if ! $answer
+               throw 1 "Commit Aborted"
+          git add .
+          git commit -m "$message"
+          input --confirm "Push <$(git branch --show-current)>?" -v answer
+          if ! $answer
+               throw 1 "Push Aborted"
+          git push
+     .set(version<str>)
+          if $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$
+               cargo set-version $version
+          else
+               throw 1 "Invalid version: $version"
+
+.build()
+     make build
+
+.install(
+     [--sudo]
+)
+     if $sudo
+          sudo make install
+     else
+          make install
