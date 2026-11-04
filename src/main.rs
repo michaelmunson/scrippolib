@@ -17,6 +17,11 @@ struct Cli {
 enum Command {
     /// Initialize a new scrippolib project (creates .scrippo here)
     Init,
+    /// Create a new package or script and open it in the configured editor
+    New {
+        #[command(subcommand)]
+        kind: NewCommand,
+    },
     /// Install a package or script from the registry, a Git repository, or a directory
     Install {
         /// A registry name, a Git URL/repository, or a directory (use ./name for a directory
@@ -59,6 +64,24 @@ enum Command {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum NewCommand {
+    /// Create a package: .scrippo/lib/<name>.scrippo (needs `scrippolib init`)
+    Package {
+        name: String,
+        /// Create in ~/.scrippo/lib (or SCRIPPO_HOME) instead of the current project
+        #[arg(short, long)]
+        global: bool,
+    },
+    /// Create a script: <name>.scrippo in the current directory
+    Script {
+        name: String,
+        /// Create in ~/.scrippo/scripts (or SCRIPPO_HOME) instead of the current directory
+        #[arg(short, long)]
+        global: bool,
+    },
+}
+
 fn main() {
     if let Err(err) = run(Cli::parse()) {
         eprintln!("scrippolib: {err:#}");
@@ -72,6 +95,15 @@ fn run(cli: Cli) -> Result<()> {
             let path = paths::initialize_environment(&std::env::current_dir()?)?;
             println!("initialized {}", path.display());
             Ok(())
+        }
+        Command::New { kind } => {
+            let (kind, name, global) = match kind {
+                NewCommand::Package { name, global } => (paths::NewKind::Package, name, global),
+                NewCommand::Script { name, global } => (paths::NewKind::Script, name, global),
+            };
+            let path = scrippolib::create::create(kind, global, &name)?;
+            println!("created {}", path.display());
+            scrippolib::create::open_in_editor(&path)
         }
         Command::Install { name, global, tag } => run_install(&name, global, tag),
         Command::Update { name, global } => run_update(name.as_deref(), global),

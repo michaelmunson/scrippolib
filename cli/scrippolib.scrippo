@@ -1,0 +1,88 @@
+#? Install and manage scrippo packages and scripts (a wrapper around scrippolib-core)
+core()
+  local bin="${SCRIPPOLIB_CORE:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/scrippolib-core}"
+  [[ -x $bin ]] || bin=scrippolib-core
+  "$bin" "$@"
+
+if [[ ${1-} == -V || ${1-} == --version ]]
+  core --version
+  exit 0
+
+#? Initialize a new scrippolib project (creates .scrippo here)
+.init()
+  core init
+
+#? Create a new package or script and open it in the configured editor
+.new()
+  #? Create a package in .scrippo/lib (needs `scrippolib init`)
+  .package(
+    name
+    #? Create in ~/.scrippo/lib (or SCRIPPO_HOME) instead of the current project
+    [-g / --global]
+  )
+    args=()
+    [[ $global == true ]] && args+=(--global)
+    core new package "${args[@]}" -- "$name"
+
+  #? Create a script in the current directory
+  .script(
+    name
+    #? Create in ~/.scrippo/scripts (or SCRIPPO_HOME) instead of the current directory
+    [-g / --global]
+  )
+    args=()
+    [[ $global == true ]] && args+=(--global)
+    core new script "${args[@]}" -- "$name"
+
+#? Install a package or script: <name> is a registry name, a Git URL or a directory (use ./dir for a directory)
+.install(
+  name
+  #? Install into ~/.scrippo (or SCRIPPO_HOME) instead of the current project
+  [-g / --global]
+  #? Exact stable version tag to install from a Git repository (default: highest)
+  [--tag<str>]
+)
+  args=()
+  [[ $global == true ]] && args+=(--global)
+  [[ -n ${tag-} ]] && args+=(--tag "$tag")
+  core install "${args[@]}" -- "$name"
+
+#? Update a package or script, or everything installed when no name is given
+.update(
+  [name]
+  #? Update in ~/.scrippo (or SCRIPPO_HOME) instead of the current project
+  [-g / --global]
+)
+  args=()
+  [[ $global == true ]] && args+=(--global)
+  core update "${args[@]}" ${name:+"$name"}
+
+#? Remove an installed package or script
+.uninstall(
+  name
+  #? Remove from ~/.scrippo (or SCRIPPO_HOME) instead of the current project
+  [-g / --global]
+)
+  args=()
+  [[ $global == true ]] && args+=(--global)
+  core uninstall "${args[@]}" -- "$name"
+
+#? List installed packages and scripts
+.list([-g / --global])
+  args=()
+  [[ $global == true ]] && args+=(--global)
+  core list "${args[@]}"
+
+#? Show information about a package or script (from the registry when not installed)
+.info(
+  name
+  #? Look in ~/.scrippo (or SCRIPPO_HOME) instead of the current project
+  [-g / --global]
+)
+  args=()
+  [[ $global == true ]] && args+=(--global)
+  core info "${args[@]}" -- "$name"
+
+#? Print settings, or set them: registry=<url>
+.configure(*options)
+  core configure "${options[@]}"

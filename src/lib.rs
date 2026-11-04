@@ -1,5 +1,6 @@
 //! `scrippolib`: install, update and remove scrippo packages and scripts.
 pub mod config;
+pub mod create;
 pub mod install;
 pub mod registry;
 pub mod source;

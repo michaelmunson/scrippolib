@@ -1,10 +1,11 @@
 # scrippolib
 
 The package manager for [scrippo](../scriptopotamus) packages and scripts. It replaces the
-`scrippo -i` / `-ls` / `-rm` commands.
+`scrippo -i` / `-ls` / `-rm` commands, and it now owns `scrippo -n` as `scrippolib new`.
 
 ```bash
 scrippolib init                         # create .scrippo in this directory
+scrippolib new package|script <name> [-g]  # create a starter file, open the configured editor
 scrippolib install <name> [-g]          # registry name, Git URL/repository, or directory
 scrippolib update [<name>] [-g]         # one install, or everything in the scope
 scrippolib uninstall <name> [-g]
@@ -44,11 +45,17 @@ Settings are stored in `$SCRIPPO_HOME/scrippolib.config` (override the path with
 
 ## Build
 
+`scrippolib` is a scrippo script, like `scrippo` itself: [cli/scrippolib.scrippo](cli/scrippolib.scrippo)
+declares the commands, options and usage text, and `make build` compiles it to
+`target/debug/scrippolib`, a bash script that validates its arguments and then execs
+`scrippolib-core`, the Rust binary doing the work (found next to it; override with
+`SCRIPPOLIB_CORE`). Both must sit side by side, as `make install` arranges.
+
 ```bash
-make build      # cargo build
+make build      # cargo build + compile the wrapper (needs ../scriptopotamus built: make build there)
 make test
-make install    # /usr/local/bin/scrippolib
+make install    # /usr/local/bin/scrippolib and scrippolib-core
 ```
 
-`scrippolib` depends on the `scriptopotamus` crate (the scrippo compiler) by path, so
+`scrippolib-core` depends on the `scriptopotamus` crate (the scrippo compiler) by path, so
 `../scriptopotamus` must be checked out next to this repository.

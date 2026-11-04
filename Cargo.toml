@@ -1,6 +1,6 @@
 [package]
 name = "scrippolib"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "Package manager for scrippo packages and scripts"
 
@@ -9,7 +9,7 @@ name = "scrippolib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "scrippolib"
+name = "scrippolib-core"
 path = "src/main.rs"
 
 [dependencies]
