@@ -5,7 +5,7 @@ The package manager for [scrippo](../scriptopotamus) packages and scripts. It re
 
 ```bash
 scrippolib init                         # create .scrippo in this directory
-scrippolib new package|script <name> [-g]  # create a starter file, open the configured editor
+scrippolib new package|script <name> [-g]  # create a starter file (with @info), open the configured editor
 scrippolib install <name> [-g]          # registry name, Git URL/repository, or directory
 scrippolib update [<name>] [-g]         # one install, or everything in the scope
 scrippolib uninstall <name> [-g]

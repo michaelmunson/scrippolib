@@ -550,7 +550,11 @@ fn new_creates_packages_and_scripts_locally_and_globally() {
     assert!(f.lib().join("mylib.scrippo").is_file());
     f.ok(&["new", "script", "hello"]);
     let script = fs::read_to_string(f.project.join("hello.scrippo")).unwrap();
-    assert!(script.starts_with("#! /usr/bin/env scrippo\n.main()"), "{script}");
+    assert!(script.starts_with("#! /usr/bin/env scrippo\n@info\n  --name hello\n  --version 0.1.0\n"), "{script}");
+    assert!(script.contains("  --script\n") && script.ends_with(".()\n  -> \"root command\"\n"), "{script}");
+    let package = fs::read_to_string(f.lib().join("mylib.scrippo")).unwrap();
+    assert!(package.starts_with("@info\n  --name mylib\n  --version 0.1.0\n"), "{package}");
+    assert!(package.contains("  --package\n"), "{package}");
     f.ok(&["new", "script", "-g", "greet"]);
     assert!(f.home.join("scripts/greet.scrippo").is_file());
     f.ok(&["new", "package", "--global", "shared"]);
@@ -600,4 +604,20 @@ fn new_opens_the_configured_editor_and_keeps_files_when_it_fails() {
     assert!(!failed.status.success());
     assert!(text(&failed).contains("editor exited"), "{}", text(&failed));
     assert!(f.project.join("failing.scrippo").is_file());
+}
+
+#[test]
+fn new_files_are_installable_as_they_are() {
+    let f = Fixture::new();
+    f.init();
+    let source = f.root.join("mine");
+    fs::create_dir_all(&source).unwrap();
+    f.ok(&["new", "package", "mylib"]);
+    f.ok(&["new", "script", "hello"]);
+    fs::rename(f.lib().join("mylib.scrippo"), source.join("mylib.scrippo")).unwrap();
+    fs::rename(f.project.join("hello.scrippo"), source.join("hello.scrippo")).unwrap();
+    let out = f.ok(&["install", "-g", &source.display().to_string()]);
+    assert!(out.contains("mylib@0.1.0") && out.contains("hello@0.1.0"), "{out}");
+    assert!(f.home.join("lib/mylib.bash").is_file());
+    assert!(f.home.join("scripts/hello.scrippo").exists());
 }

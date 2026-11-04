@@ -20,10 +20,12 @@ pub fn create(kind: NewKind, global: bool, name: &str) -> Result<PathBuf> {
     }
 
     let body = match kind {
-        NewKind::Package => format!("# {stem} package\n"),
-        NewKind::Script => {
-            format!("#! /usr/bin/env scrippo\n.main()\n\t-> \"hello from {stem}\"\n")
-        }
+        NewKind::Package => format!(
+            "@info\n  --name {stem}\n  --version 0.1.0\n  --description \"A {stem} package\"\n  --package\n\n# {stem} package\n"
+        ),
+        NewKind::Script => format!(
+            "#! /usr/bin/env scrippo\n@info\n  --name {stem}\n  --version 0.1.0\n  --description \"A {stem} script\"\n  --script\n\n.()\n  -> \"root command\"\n"
+        ),
     };
     std::fs::write(&path, body).with_context(|| format!("failed to write {}", path.display()))?;
     Ok(path)

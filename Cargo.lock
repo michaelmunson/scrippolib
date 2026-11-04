@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "scrippolib"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "scriptopotamus"
-version = "1.9.0"
+version = "1.11.0"
 dependencies = [
  "anyhow",
  "clap",
