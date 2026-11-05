@@ -155,6 +155,9 @@ fn registry_names_install_update_list_info_and_uninstall() {
     assert!(list.contains("util") && list.contains("package"), "{list}");
     assert!(list.contains("deploy") && list.contains("script"), "{list}");
     assert!(f.project.join("deploy.scrippo").is_symlink());
+    assert!(f.project.join(".scrippo/.scrippolib/packages/util/content/install.json").is_file());
+    assert!(f.project.join(".scrippo/.scrippolib/scripts/deploy/content/install.json").is_file());
+    assert!(!f.project.join(".scrippo-installed").exists());
     let info = f.ok(&["info", "util"]);
     assert!(info.contains("version:     1.0.0") && info.contains("source:      registry"), "{info}");
     f.fails(&["install", "util"], "use `scrippolib update util`");

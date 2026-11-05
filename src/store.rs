@@ -1,9 +1,10 @@
 //! What is installed where: install locations, manifests, listing and removal.
 //!
 //! An install of one source (a repository, directory, or registry entry) is a *group*,
-//! stored at `<destination>/.scrippo-installed/<packages|scripts>/<id>/content/`
-//! with an `install.json` manifest. The public files (`<name>.bash` for packages,
-//! `<name>.scrippo` for scripts) live in `<destination>` and point into the group.
+//! stored at `<root>/.scrippolib/<packages|scripts>/<id>/content/` with an `install.json`
+//! manifest, where `<root>` is the project's `.scrippo` directory (or the global one). The
+//! public files (`<name>.bash` for packages, `<name>.scrippo` for scripts) live in the
+//! destination and point into the group.
 use crate::{kind_dir, kind_name};
 use anyhow::{Context, Result, bail};
 use scriptopotamus::paths::{self, NewKind};
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const INSTALLED_DIR: &str = ".scrippo-installed";
+pub const INSTALLED_DIR: &str = ".scrippolib";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
@@ -24,6 +25,10 @@ pub struct Manifest {
     /// Set for registry installs: the registry the entry came from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry: Option<String>,
+    /// Where the public files live, relative to the store root. Empty in older manifests,
+    /// which means the default for `kind`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub destination: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +54,8 @@ pub struct ManifestEntry {
 #[derive(Debug, Clone)]
 pub struct Group {
     pub kind: NewKind,
+    /// The `.scrippo` directory holding `.scrippolib`.
+    pub root: PathBuf,
     /// Directory holding the public files.
     pub destination: PathBuf,
     pub id: String,
@@ -57,7 +64,7 @@ pub struct Group {
 
 impl Group {
     pub fn dir(&self) -> PathBuf {
-        group_dir(&self.destination, self.kind, &self.id)
+        group_dir(&self.root, self.kind, &self.id)
     }
 
     pub fn public_file(&self, name: &str) -> PathBuf {
@@ -69,9 +76,8 @@ impl Group {
     }
 }
 
-pub fn group_dir(destination: &Path, kind: NewKind, id: &str) -> PathBuf {
-    destination
-        .join(INSTALLED_DIR)
+pub fn group_dir(root: &Path, kind: NewKind, id: &str) -> PathBuf {
+    root.join(INSTALLED_DIR)
         .join(kind_dir(kind))
         .join(id)
 }
@@ -83,30 +89,66 @@ pub fn public_file_name(kind: NewKind, name: &str) -> String {
     }
 }
 
-/// Where `kind` is installed. Local packages need an initialized project.
-pub fn destination(kind: NewKind, global: bool) -> Result<PathBuf> {
-    if global {
-        return match kind {
-            NewKind::Package => paths::global_lib_dir(),
-            NewKind::Script => paths::global_scripts_dir(),
-        };
-    }
-    let cwd = std::env::current_dir().context("failed to get current directory")?;
-    Ok(match kind {
-        NewKind::Package => paths::require_project_scrippo_dir(&cwd)
-            .map_err(|_| anyhow::anyhow!("run `scrippolib init` to initialize your environment"))?
-            .join("lib"),
-        NewKind::Script => cwd,
-    })
+/// Where `kind` is installed: the store root and the directory for the public files.
+pub struct Location {
+    pub root: PathBuf,
+    pub destination: PathBuf,
 }
 
-/// Like [`destination`], but `None` when it does not exist yet (nothing installed there).
-fn existing_destination(kind: NewKind, global: bool) -> Result<Option<PathBuf>> {
-    if !global && kind == NewKind::Package {
-        let cwd = std::env::current_dir().context("failed to get current directory")?;
-        return Ok(paths::find_project_scrippo_dir(&cwd).map(|dir| dir.join("lib")));
+/// Where `kind` is installed. Local installs need an initialized project.
+pub fn location(kind: NewKind, global: bool) -> Result<Location> {
+    if global {
+        return Ok(Location {
+            root: paths::scrippo_home()?,
+            destination: match kind {
+                NewKind::Package => paths::global_lib_dir()?,
+                NewKind::Script => paths::global_scripts_dir()?,
+            },
+        });
     }
-    Ok(Some(destination(kind, global)?))
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    let root = paths::require_project_scrippo_dir(&cwd)
+        .map_err(|_| anyhow::anyhow!("run `scrippolib init` to initialize your environment"))?;
+    let destination = match kind {
+        NewKind::Package => root.join("lib"),
+        NewKind::Script => cwd,
+    };
+    Ok(Location { root, destination })
+}
+
+pub fn destination(kind: NewKind, global: bool) -> Result<PathBuf> {
+    Ok(location(kind, global)?.destination)
+}
+
+/// Like [`location`], but `None` when there is no store root yet (nothing installed).
+fn existing_root(global: bool) -> Result<Option<PathBuf>> {
+    if global {
+        return Ok(Some(paths::scrippo_home()?));
+    }
+    let cwd = std::env::current_dir().context("failed to get current directory")?;
+    Ok(paths::find_project_scrippo_dir(&cwd))
+}
+
+/// `to` relative to the directory `from`. Both must be absolute and symlink-free.
+pub fn relative_path(from: &Path, to: &Path) -> PathBuf {
+    let from: Vec<_> = from.components().collect();
+    let to: Vec<_> = to.components().collect();
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut out = PathBuf::new();
+    for _ in common..from.len() {
+        out.push("..");
+    }
+    for part in &to[common..] {
+        out.push(part);
+    }
+    out
+}
+
+fn default_destination(kind: NewKind) -> &'static str {
+    match kind {
+        NewKind::Package => "lib",
+        NewKind::Script => "scripts",
+    }
 }
 
 pub fn read_manifest(group_dir: &Path) -> Result<Manifest> {
@@ -130,12 +172,13 @@ pub fn write_manifest(group_dir: &Path, manifest: &Manifest) -> Result<()> {
 /// Every installed group in the local or global scope, packages first, sorted by id.
 pub fn groups(global: bool) -> Result<Vec<Group>> {
     let mut groups = Vec::new();
+    let Some(root) = existing_root(global)? else {
+        return Ok(groups);
+    };
+    let cwd = std::env::current_dir().ok().and_then(|cwd| cwd.canonicalize().ok());
     for kind in [NewKind::Package, NewKind::Script] {
-        let Some(destination) = existing_destination(kind, global)? else {
-            continue;
-        };
-        let root = destination.join(INSTALLED_DIR).join(kind_dir(kind));
-        let Ok(items) = fs::read_dir(&root) else {
+        let store = root.join(INSTALLED_DIR).join(kind_dir(kind));
+        let Ok(items) = fs::read_dir(&store) else {
             continue;
         };
         let mut ids: Vec<_> = items
@@ -145,14 +188,29 @@ pub fn groups(global: bool) -> Result<Vec<Group>> {
             .collect();
         ids.sort();
         for id in ids {
-            match read_manifest(&root.join(&id)) {
-                Ok(manifest) => groups.push(Group {
-                    kind,
-                    destination: destination.clone(),
-                    id,
-                    manifest,
-                }),
-                Err(err) => eprintln!("warning: skipping {}: {err:#}", root.join(&id).display()),
+            match read_manifest(&store.join(&id)) {
+                Ok(manifest) => {
+                    let relative = match manifest.destination.as_str() {
+                        "" => default_destination(kind),
+                        other => other,
+                    };
+                    let destination = root.join(relative);
+                    // Local scripts live in the directory they were installed from.
+                    if !global && kind == NewKind::Script {
+                        let here = destination.canonicalize().ok();
+                        if here.is_none() || here != cwd {
+                            continue;
+                        }
+                    }
+                    groups.push(Group {
+                        kind,
+                        root: root.clone(),
+                        destination,
+                        id,
+                        manifest,
+                    });
+                }
+                Err(err) => eprintln!("warning: skipping {}: {err:#}", store.join(&id).display()),
             }
         }
     }

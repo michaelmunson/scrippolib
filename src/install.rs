@@ -148,6 +148,7 @@ struct KindPlan<'a> {
     kind: NewKind,
     entries: Vec<&'a Entry>,
     tag: String,
+    root: PathBuf,
     destination: PathBuf,
     replacing: Option<&'a Group>,
 }
@@ -216,14 +217,18 @@ fn execute(origin: &Origin, global: bool, replacing: &[Group]) -> Result<Vec<Out
                 bail!("duplicate {} entry name: {}", kind_dir(kind), entry.info.name);
             }
         }
-        let destination = match group {
-            Some(group) => group.destination.clone(),
-            None => store::destination(kind, global)?,
+        let (root, destination) = match group {
+            Some(group) => (group.root.clone(), group.destination.clone()),
+            None => {
+                let location = store::location(kind, global)?;
+                (location.root, location.destination)
+            }
         };
         plans.push(KindPlan {
             kind,
             entries,
             tag,
+            root,
             destination,
             replacing: group,
         });
@@ -265,6 +270,8 @@ fn execute(origin: &Origin, global: bool, replacing: &[Group]) -> Result<Vec<Out
     for plan in &work {
         fs::create_dir_all(&plan.destination)?;
         let destination = plan.destination.canonicalize()?;
+        fs::create_dir_all(&plan.root)?;
+        let root = plan.root.canonicalize()?;
         let scratch = tempfile::Builder::new()
             .prefix(".scrippo-install-")
             .tempdir_in(&destination)?;
@@ -310,11 +317,15 @@ fn execute(origin: &Origin, global: bool, replacing: &[Group]) -> Result<Vec<Out
             kind: kind_dir(plan.kind).to_string(),
             entries: metadata,
             registry: origin.registry.clone(),
+            destination: store::relative_path(&root, &destination)
+                .to_string_lossy()
+                .into_owned(),
         };
         store::write_manifest_at(&content, &manifest)?;
         prepared.push(Prepared {
             publication: None,
             scratch,
+            root,
             destination,
             artifacts,
         });
@@ -328,7 +339,7 @@ fn execute(origin: &Origin, global: bool, replacing: &[Group]) -> Result<Vec<Out
         fs::create_dir(&lock).context("another install is publishing here (or .scrippo-install.lock remains from an interrupted process)")?;
         locks.push(LockDir(lock));
 
-        let repo_dir = store::group_dir(&prepared.destination, plan.kind, &repo_id);
+        let repo_dir = store::group_dir(&prepared.root, plan.kind, &repo_id);
         let mut publication = Publication {
             files: Vec::new(),
             repository: None,
@@ -376,14 +387,14 @@ fn execute(origin: &Origin, global: bool, replacing: &[Group]) -> Result<Vec<Out
             let public = prepared.destination.join(store::public_file_name(plan.kind, name));
             match plan.kind {
                 NewKind::Package => fs::hard_link(&stored, &public)?,
-                NewKind::Script => script_link(stored.strip_prefix(&prepared.destination)?, &public)?,
+                NewKind::Script => script_link(&store::relative_path(&prepared.destination, &stored), &public)?,
             }
             publication.files.push(public);
         }
     }
 
     for (plan, prepared) in work.iter().zip(&prepared) {
-        let repo_dir = store::group_dir(&prepared.destination, plan.kind, &repo_id);
+        let repo_dir = store::group_dir(&prepared.root, plan.kind, &repo_id);
         run_install_hooks(&repo_dir.join("content/source"), &plan.entries, "post-install")?;
     }
 
@@ -419,6 +430,7 @@ struct Prepared {
     // Dropped first, so a failed publish rolls back before the scratch directory goes.
     publication: Option<Publication>,
     scratch: tempfile::TempDir,
+    root: PathBuf,
     destination: PathBuf,
     artifacts: Vec<(String, PathBuf)>,
 }
