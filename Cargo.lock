@@ -280,7 +280,7 @@ dependencies = [
 
 [[package]]
 name = "scriptopotamus"
-version = "1.11.0"
+version = "1.12.1"
 dependencies = [
  "anyhow",
  "clap",

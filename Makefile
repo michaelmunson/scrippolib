@@ -24,3 +24,7 @@ test:
 install: build-release
 	install -m 755 target/release/scrippolib-core /usr/local/bin/scrippolib-core
 	install -m 755 target/release/scrippolib /usr/local/bin/scrippolib
+
+sudo-install: build-release
+	sudo install -m 755 target/release/scrippolib-core /usr/local/bin/scrippolib-core
+	sudo install -m 755 target/release/scrippolib /usr/local/bin/scrippolib
